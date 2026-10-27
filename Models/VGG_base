@@ -1,0 +1,132 @@
+from torchvision import transforms
+import torch
+import torch.nn as nn
+
+from torchvision.models import vgg16, VGG16_Weights
+
+
+
+import torch
+import torch.nn as nn
+from torchvision.models import vgg16, VGG16_Weights
+
+
+class VGG16Encoder(nn.Module):
+    def __init__(self, pretrained=True, freeze=True):
+        super().__init__()
+
+        weights = VGG16_Weights.DEFAULT if pretrained else None
+        backbone = vgg16(weights=weights)
+
+        # Convolutional feature extractor
+        self.features = backbone.features
+
+        self.feature_dim = 512
+
+        if freeze:
+            for param in self.features.parameters():
+                param.requires_grad = False
+
+        # ImageNet normalization
+        self.register_buffer(
+            "mean",
+            torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+        )
+        self.register_buffer(
+            "std",
+            torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+        )
+
+        # Useful for global style features
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+
+    def forward(self, x):
+        # x must be RGB, float, and in [0, 1]
+        x = (x - self.mean) / self.std
+
+        # Shape: (B, 512, H', W')
+        spatial_features = self.features(x)
+
+        # Shape: (B, 512)
+        global_features = self.pool(spatial_features).flatten(1)
+
+        return spatial_features, global_features
+
+
+
+class LUTBank(nn.Module):
+    def __init__(self, num_luts=8, size=16):
+        super().__init__()
+
+        # Build an identity LUT: output RGB equals input RGB.
+        axis = torch.linspace(0, 1, size)
+        r, g, b = torch.meshgrid(
+            axis, axis, axis, indexing="ij"
+        )
+        identity_lut = torch.stack(
+            [r, g, b], dim=-1
+        )  # (16, 16, 16, 3)
+
+        # Start all LUTs near identity.
+        initial_luts = identity_lut.unsqueeze(0).repeat(
+            num_luts, 1, 1, 1, 1
+        )
+
+        # Small independent perturbations let LUTs specialize.
+        initial_luts += 0.001 * torch.randn_like(initial_luts)
+
+        # Trainable parameters.
+        self.luts = nn.Parameter(initial_luts.clamp(0, 1))
+
+    def forward(self):
+        return self.luts
+
+
+class PredictModel(nn.Module):
+
+    def __init__(
+        self,
+        freeze_encoder=True,
+        lut_size=16
+    ):
+
+        super().__init__()
+
+        self.encoder = VGG16Encoder(
+            pretrained=True,
+            freeze=freeze_encoder
+        )
+
+        self.lut_bank = LUTBank(
+            num_luts=8,
+            size=lut_size
+        )
+
+
+    def forward(
+        self,
+        source,
+        reference
+    ):
+
+        source_features = self.encoder(
+            source
+        )
+
+        reference_features = self.encoder(
+            reference
+        )
+
+        # Reference-style difference
+        style_difference = (
+            reference_features
+            - source_features
+        )
+
+        lut = self.lut_bank()
+
+        return lut
+    
+print("VGG_base.py loaded successfully")
+
+
