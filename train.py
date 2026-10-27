@@ -1,366 +1,387 @@
-from pathlib import Path
 
+from pathlib import Path
+import random
+
+import numpy as np
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from dataset import PST50Dataset
-from Models.VGG_base import PredictModel
-from lut_train import apply_lut
+from Models.VGGBase import PredictModel
+from lut_train import apply_lut_bank, grading_loss
 
 
 # ============================================================
-# CONFIG
+# CONFIGURATION
 # ============================================================
 
-ROOT = Path("F:/Cog")
-
-TRAIN_CSV = ROOT / "data" / "pairs" / "train.csv"
-VAL_CSV = ROOT / "data" / "pairs" / "val.csv"
-
-# Separate folder to preserve previous experiments
-CHECKPOINT_DIR = ROOT / "checkpoints_VGG_2epochs"
+ROOT = Path(r"F:\Junshoku\PST50")
+CHECKPOINT_DIR = Path(r"F:\Junshoku\checkpoints_spatial_lut")
 CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 
 IMAGE_SIZE = 256
 LUT_SIZE = 16
-BATCH_SIZE = 2
+NUM_LUTS = 8
+BATCH_SIZE = 1
 
-EPOCHS = 2
-PATIENCE = 3
-MIN_DELTA = 0.0001
+EPOCHS = 20
+PATIENCE = 5
+MIN_DELTA = 1e-4
 
 LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-4
+WEIGHT_DECAY = 1e-5
 NUM_WORKERS = 0
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-USE_AMP = DEVICE == "cuda"
+SEED = 42
+PRETRAINED_VGG = True
+USE_AMP = True
+
+LUT_SMOOTH_WEIGHT = 0.01
+MAP_SMOOTH_WEIGHT = 0.01
 
 
 # ============================================================
-# DEVICE
+# REPRODUCIBILITY
 # ============================================================
 
-print("Device:", DEVICE)
+def seed_everything(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
-if DEVICE == "cuda":
-    print("GPU:", torch.cuda.get_device_name(0))
-    print("CUDA:", torch.version.cuda)
-
-
-# ============================================================
-# DATASETS
-# ============================================================
-
-print("\nLoading datasets...")
-
-train_dataset = PST50Dataset(
-    root=ROOT / "data" / "pairs" / "train",
-    image_size=IMAGE_SIZE
-)
-
-val_dataset = PST50Dataset(
-    root=ROOT / "data" / "pairs" / "val",
-    image_size=IMAGE_SIZE
-)
-
-print("Train samples:", len(train_dataset))
-print("Validation samples:", len(val_dataset))
-
-if len(train_dataset) == 0:
-    raise RuntimeError(f"No training samples found: {TRAIN_CSV}")
-
-if len(val_dataset) == 0:
-    raise RuntimeError(f"No validation samples found: {VAL_CSV}")
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 # ============================================================
-# DATALOADERS
+# TRAINING
 # ============================================================
 
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=True,
-    num_workers=NUM_WORKERS,
-    pin_memory=USE_AMP
-)
+def main():
+    seed_everything(SEED)
 
-val_loader = DataLoader(
-    val_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=False,
-    num_workers=NUM_WORKERS,
-    pin_memory=USE_AMP
-)
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )
 
+    use_amp = USE_AMP and device.type == "cuda"
 
-# ============================================================
-# MODEL
-# ============================================================
+    print("Device:", device)
 
-model = PredictModel(
-    freeze_encoder=True,
-    lut_size=LUT_SIZE
-).to(DEVICE)
+    if device.type == "cuda":
+        print("GPU:", torch.cuda.get_device_name(0))
+        print("CUDA:", torch.version.cuda)
 
-total_params = sum(
-    p.numel() for p in model.parameters()
-)
+    # --------------------------------------------------------
+    # DATASETS
+    # --------------------------------------------------------
 
-trainable_params = sum(
-    p.numel() for p in model.parameters()
-    if p.requires_grad
-)
+    # Small initial experiment only.
+    # Train: 1-40; validation: 41-50.
+    train_dataset = PST50Dataset(
+        root=ROOT,
+        indices=range(1, 41),
+        image_size=IMAGE_SIZE,
+    )
 
-print("\nModel created.")
-print(f"Total parameters: {total_params:,}")
-print(f"Trainable parameters: {trainable_params:,}")
+    val_dataset = PST50Dataset(
+        root=ROOT,
+        indices=range(41, 51),
+        image_size=IMAGE_SIZE,
+    )
 
+    print("Training samples:", len(train_dataset))
+    print("Validation samples:", len(val_dataset))
 
-# ============================================================
-# LOSS AND OPTIMIZER
-# ============================================================
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_WORKERS,
+        pin_memory=device.type == "cuda",
+    )
 
-criterion = nn.L1Loss()
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=device.type == "cuda",
+    )
 
-optimizer = torch.optim.AdamW(
-    filter(
-        lambda p: p.requires_grad,
-        model.parameters()
-    ),
-    lr=LEARNING_RATE,
-    weight_decay=WEIGHT_DECAY
-)
+    # --------------------------------------------------------
+    # MODEL
+    # --------------------------------------------------------
 
-scaler = torch.amp.GradScaler(
-    "cuda",
-    enabled=USE_AMP
-)
+    model = PredictModel(
+        freeze_encoder=True,
+        lut_size=LUT_SIZE,
+        num_luts=NUM_LUTS,
+        pretrained=PRETRAINED_VGG,
+    ).to(device)
 
+    total_params = sum(
+        p.numel() for p in model.parameters()
+    )
 
-# ============================================================
-# TRAIN ONE EPOCH
-# ============================================================
+    trainable_params = sum(
+        p.numel()
+        for p in model.parameters()
+        if p.requires_grad
+    )
 
-def train_one_epoch():
+    print("Total parameters:", f"{total_params:,}")
+    print("Trainable parameters:", f"{trainable_params:,}")
 
-    model.train()
+    # --------------------------------------------------------
+    # OPTIMIZER
+    # --------------------------------------------------------
 
-    total_loss = 0.0
-    total_samples = 0
+    optimizer = torch.optim.AdamW(
+        [
+            p for p in model.parameters()
+            if p.requires_grad
+        ],
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+    )
 
-    for batch_index, batch in enumerate(train_loader, start=1):
+    scaler = torch.amp.GradScaler(
+        "cuda",
+        enabled=use_amp,
+    )
 
-        source = batch["source"].to(
-            DEVICE,
-            non_blocking=True
-        )
+    best_val_loss = float("inf")
+    epochs_without_improvement = 0
 
-        reference = batch["reference"].to(
-            DEVICE,
-            non_blocking=True
-        )
+    best_path = CHECKPOINT_DIR / "best.pt"
+    latest_path = CHECKPOINT_DIR / "latest.pt"
 
-        target = batch["target"].to(
-            DEVICE,
-            non_blocking=True
-        )
+    # ========================================================
+    # EPOCHS
+    # ========================================================
 
-        optimizer.zero_grad(set_to_none=True)
+    for epoch in range(1, EPOCHS + 1):
 
-        with torch.autocast(
-            device_type=DEVICE,
-            dtype=torch.float16,
-            enabled=USE_AMP
-        ):
+        # ----------------------------------------------------
+        # TRAIN
+        # ----------------------------------------------------
 
-            predicted_lut = model(source, reference)
+        model.train()
 
-            predicted_image = apply_lut(
-                source,
-                predicted_lut
+        train_loss_sum = 0.0
+        train_samples = 0
+
+        print(f"\nEpoch {epoch}/{EPOCHS}")
+
+        for step, batch in enumerate(train_loader, start=1):
+
+            source = batch["source"].to(
+                device, non_blocking=True
+            )
+            reference = batch["reference"].to(
+                device, non_blocking=True
+            )
+            target = batch["target"].to(
+                device, non_blocking=True
             )
 
-            loss = criterion(
-                predicted_image,
-                target
+            optimizer.zero_grad(set_to_none=True)
+
+            # VGG encoder and predictor.
+            with torch.autocast(
+                device_type=device.type,
+                enabled=use_amp,
+            ):
+                luts, weights = model(source, reference)
+
+            # LUT interpolation and loss in FP32 for stability.
+            with torch.autocast(
+                device_type=device.type,
+                enabled=False,
+            ):
+                luts = luts.float()
+                weights = weights.float()
+
+                # Shape: (B, K, 3, H, W)
+                transformed = apply_lut_bank(
+                    source.float(), luts
+                )
+
+                # Broadcast weights over RGB channels.
+                # Shape: (B, K, 1, H, W)
+                prediction = (
+                    transformed * weights.unsqueeze(2)
+                ).sum(dim=1)
+
+                prediction = prediction.clamp(0.0, 1.0)
+
+                loss, metrics = grading_loss(
+                    prediction=prediction,
+                    target=target.float(),
+                    luts=luts,
+                    weights=weights,
+                    lut_smooth_weight=LUT_SMOOTH_WEIGHT,
+                    map_smooth_weight=MAP_SMOOTH_WEIGHT,
+                )
+
+            # Backpropagation.
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+
+            torch.nn.utils.clip_grad_norm_(
+                [
+                    p for p in model.parameters()
+                    if p.requires_grad
+                ],
+                max_norm=1.0,
             )
 
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
+            scaler.step(optimizer)
+            scaler.update()
 
-        batch_size = source.size(0)
+            n = source.size(0)
+            train_loss_sum += loss.item() * n
+            train_samples += n
 
-        total_loss += loss.item() * batch_size
-        total_samples += batch_size
+            if step % 10 == 0 or step == len(train_loader):
+                print(
+                    f"  Train {step}/{len(train_loader)}"
+                    f" | Loss: {loss.item():.5f}"
+                    f" | L1: {metrics['l1']:.5f}"
+                )
 
-        if batch_index % 100 == 0:
-            print(
-                f"  Batch {batch_index}/{len(train_loader)}"
-                f" | Running L1: "
-                f"{total_loss / total_samples:.6f}"
-            )
+        train_loss = train_loss_sum / max(train_samples, 1)
 
-    return total_loss / total_samples
+        # ----------------------------------------------------
+        # VALIDATION
+        # ----------------------------------------------------
 
+        model.eval()
 
-# ============================================================
-# VALIDATION
-# ============================================================
+        val_loss_sum = 0.0
+        val_l1_sum = 0.0
+        val_samples = 0
 
-@torch.no_grad()
-def validate():
+        with torch.no_grad():
 
-    model.eval()
+            for batch in val_loader:
 
-    total_loss = 0.0
-    total_samples = 0
+                source = batch["source"].to(
+                    device, non_blocking=True
+                )
+                reference = batch["reference"].to(
+                    device, non_blocking=True
+                )
+                target = batch["target"].to(
+                    device, non_blocking=True
+                )
 
-    for batch in val_loader:
+                with torch.autocast(
+                    device_type=device.type,
+                    enabled=use_amp,
+                ):
+                    luts, weights = model(source, reference)
 
-        source = batch["source"].to(
-            DEVICE,
-            non_blocking=True
-        )
+                with torch.autocast(
+                    device_type=device.type,
+                    enabled=False,
+                ):
+                    luts = luts.float()
+                    weights = weights.float()
 
-        reference = batch["reference"].to(
-            DEVICE,
-            non_blocking=True
-        )
+                    transformed = apply_lut_bank(
+                        source.float(), luts
+                    )
 
-        target = batch["target"].to(
-            DEVICE,
-            non_blocking=True
-        )
+                    prediction = (
+                        transformed * weights.unsqueeze(2)
+                    ).sum(dim=1).clamp(0.0, 1.0)
 
-        with torch.autocast(
-            device_type=DEVICE,
-            dtype=torch.float16,
-            enabled=USE_AMP
-        ):
+                    loss, metrics = grading_loss(
+                        prediction,
+                        target.float(),
+                        luts,
+                        weights,
+                        LUT_SMOOTH_WEIGHT,
+                        MAP_SMOOTH_WEIGHT,
+                    )
 
-            predicted_lut = model(source, reference)
+                n = source.size(0)
+                val_loss_sum += loss.item() * n
+                val_l1_sum += metrics["l1"] * n
+                val_samples += n
 
-            predicted_image = apply_lut(
-                source,
-                predicted_lut
-            )
+        val_loss = val_loss_sum / max(val_samples, 1)
+        val_l1 = val_l1_sum / max(val_samples, 1)
 
-            loss = criterion(
-                predicted_image,
-                target
-            )
+        print(f"\nTrain loss: {train_loss:.6f}")
+        print(f"Val loss:   {val_loss:.6f}")
+        print(f"Val L1:     {val_l1:.6f}")
 
-        batch_size = source.size(0)
+        # ----------------------------------------------------
+        # CHECKPOINTS
+        # ----------------------------------------------------
 
-        total_loss += loss.item() * batch_size
-        total_samples += batch_size
-
-    return total_loss / total_samples
-
-
-# ============================================================
-# TRAINING + EARLY STOPPING
-# ============================================================
-
-best_val_loss = float("inf")
-epochs_without_improvement = 0
-
-best_checkpoint = CHECKPOINT_DIR / "best.pt"
-latest_checkpoint = CHECKPOINT_DIR / "latest.pt"
-
-print("\nStarting training...")
-print("=" * 60)
-
-for epoch in range(1, EPOCHS + 1):
-
-    print(f"\nEpoch {epoch}/{EPOCHS}")
-    print("-" * 60)
-
-    # Train
-    train_loss = train_one_epoch()
-
-    # Validate
-    val_loss = validate()
-
-    print(f"\nTrain L1: {train_loss:.6f}")
-    print(f"Val L1:   {val_loss:.6f}")
-
-    # Save latest model and optimizer state
-    torch.save(
-        {
+        checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "train_loss": train_loss,
-            "val_loss": val_loss
-        },
-        latest_checkpoint
+            "val_loss": val_loss,
+            "val_l1": val_l1,
+            "config": {
+                "image_size": IMAGE_SIZE,
+                "lut_size": LUT_SIZE,
+                "num_luts": NUM_LUTS,
+            },
+        }
+
+        torch.save(checkpoint, latest_path)
+
+        if val_loss < best_val_loss - MIN_DELTA:
+
+            best_val_loss = val_loss
+            epochs_without_improvement = 0
+
+            torch.save(checkpoint, best_path)
+
+            print("Saved best checkpoint:", best_path)
+
+        else:
+            epochs_without_improvement += 1
+
+            print(
+                "No improvement:",
+                f"{epochs_without_improvement}/{PATIENCE}",
+            )
+
+        if device.type == "cuda":
+            allocated = (
+                torch.cuda.memory_allocated() / 1024**3
+            )
+            reserved = (
+                torch.cuda.memory_reserved() / 1024**3
+            )
+
+            print(
+                f"GPU memory: {allocated:.2f} GB allocated"
+                f" | {reserved:.2f} GB reserved"
+            )
+
+        if epochs_without_improvement >= PATIENCE:
+            print("Early stopping triggered.")
+            break
+
+    print("\nTraining complete.")
+    print(f"Best validation loss: {best_val_loss:.6f}")
+    print("Best checkpoint:", best_path)
+    print("Latest checkpoint:", latest_path)
+    print(
+        "Note: this 40/10 split is a pipeline experiment, "
+        "not a reliable generalization benchmark."
     )
 
-    # Check whether validation loss improved
-    if val_loss < best_val_loss - MIN_DELTA:
 
-        best_val_loss = val_loss
-        epochs_without_improvement = 0
-
-        # Save plain state_dict for compatibility
-        # with evaluators using model.load_state_dict(...)
-        torch.save(
-            model.state_dict(),
-            best_checkpoint
-        )
-
-        print("\nNew best model saved:")
-        print(best_checkpoint)
-
-    else:
-
-        epochs_without_improvement += 1
-
-        print(
-            f"No improvement: "
-            f"{epochs_without_improvement}/{PATIENCE}"
-        )
-
-    # GPU memory usage
-    if DEVICE == "cuda":
-
-        allocated = (
-            torch.cuda.memory_allocated() / 1024**3
-        )
-
-        reserved = (
-            torch.cuda.memory_reserved() / 1024**3
-        )
-
-        print(
-            f"GPU memory: {allocated:.2f} GB allocated"
-            f" | {reserved:.2f} GB reserved"
-        )
-
-    # Early stopping check
-    if epochs_without_improvement >= PATIENCE:
-
-        print(
-            f"\nEarly stopping triggered after "
-            f"{PATIENCE} consecutive epochs without "
-            f"validation improvement."
-        )
-
-        break
-
-
-# ============================================================
-# FINISHED
-# ============================================================
-
-print("\n" + "=" * 60)
-print("Training complete.")
-
-print(f"Best validation L1: {best_val_loss:.6f}")
-print(f"Best checkpoint: {best_checkpoint}")
-print(f"Latest checkpoint: {latest_checkpoint}")
+if __name__ == "__main__":
+    main()
