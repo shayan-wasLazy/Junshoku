@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import PST50Dataset
+from tst2k_dataset import TST2KDataset
 from Models.VGGBase import PredictModel
 from lut_train import apply_lut_bank, grading_loss
 
@@ -15,14 +16,16 @@ from lut_train import apply_lut_bank, grading_loss
 # CONFIGURATION
 # ============================================================
 
-ROOT = Path(r"F:\Junshoku\PST50")
-CHECKPOINT_DIR = Path(r"F:\Junshoku\checkpoints_spatial_lut")
+ROOT = Path(r"F:\Junshoku\TST2K")
+CHECKPOINT_DIR = Path(
+    r"F:\Junshoku\checkpoints_tst2k"
+)
 CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 
 IMAGE_SIZE = 256
 LUT_SIZE = 16
-NUM_LUTS = 8
-BATCH_SIZE = 1
+NUM_LUTS = 9
+BATCH_SIZE = 2
 
 EPOCHS = 20
 PATIENCE = 5
@@ -78,15 +81,15 @@ def main():
 
     # Small initial experiment only.
     # Train: 1-40; validation: 41-50.
-    train_dataset = PST50Dataset(
+    train_dataset = TST2KDataset(
         root=ROOT,
-        indices=range(1, 41),
+        split="train",
         image_size=IMAGE_SIZE,
     )
 
-    val_dataset = PST50Dataset(
+    val_dataset = TST2KDataset(
         root=ROOT,
-        indices=range(41, 51),
+        split="val",
         image_size=IMAGE_SIZE,
     )
 
@@ -380,6 +383,13 @@ def main():
     print(
         "Note: this 40/10 split is a pipeline experiment, "
         "not a reliable generalization benchmark."
+    )
+    print(
+        f"  Train {step}/{len(train_loader)}"
+        f" | Loss: {loss.item():.5f}"
+        f" | L1: {metrics['l1']:.5f}"
+        f" | LUT curvature: {metrics['lut_curvature']:.5f}"
+        f" | Usage: {metrics['lut_usage']:.5f}"
     )
 
 

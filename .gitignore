@@ -2,3 +2,7 @@
 __pycache__/
 /inferences
 /PST50
+/Outputs
+/TST2K
+/reference.jpg
+/input_video.mp4

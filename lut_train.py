@@ -11,7 +11,6 @@ def apply_lut(image, lut):
     """
     if image.ndim != 4 or image.shape[1] != 3:
         raise ValueError("Image must have shape (B, 3, H, W)")
-
     if lut.ndim != 4 or lut.shape[-1] != 3:
         raise ValueError("LUT must have shape (N, N, N, 3)")
 
@@ -23,20 +22,18 @@ def apply_lut(image, lut):
     ).clamp(0.0, 1.0)
 
     coords = pixels * (size - 1)
-
     lower = coords.floor().long()
     upper = (lower + 1).clamp(max=size - 1)
     fraction = coords - lower.to(coords.dtype)
 
     r0, g0, b0 = lower.unbind(-1)
     r1, g1, b1 = upper.unbind(-1)
-
     fr, fg, fb = fraction.unbind(-1)
+
     flat_lut = lut.reshape(-1, 3)
 
     def lookup(r, g, b):
-        index = (r * size + g) * size + b
-        return flat_lut[index]
+        return flat_lut[(r * size + g) * size + b]
 
     def blend(a, b, weight):
         weight = weight.unsqueeze(-1)
@@ -58,7 +55,6 @@ def apply_lut(image, lut):
 
     c0 = blend(c00, c01, fg)
     c1 = blend(c10, c11, fg)
-
     output = blend(c0, c1, fr)
 
     return output.reshape(
@@ -82,24 +78,36 @@ def apply_lut_bank(image, luts):
 
 
 def lut_smoothness(luts):
-    """Penalize abrupt changes between neighboring LUT entries."""
-    loss_r = (
-        luts[:, 1:, :, :, :] - luts[:, :-1, :, :, :]
+    """
+    Second-order curvature penalty.
+    A linear identity LUT has zero curvature along each axis.
+    """
+    if luts.shape[1] < 3:
+        return luts.new_zeros(())
+
+    curvature_r = (
+        luts[:, 2:, :, :, :]
+        - 2.0 * luts[:, 1:-1, :, :, :]
+        + luts[:, :-2, :, :, :]
     ).abs().mean()
 
-    loss_g = (
-        luts[:, :, 1:, :, :] - luts[:, :, :-1, :, :]
+    curvature_g = (
+        luts[:, :, 2:, :, :]
+        - 2.0 * luts[:, :, 1:-1, :, :]
+        + luts[:, :, :-2, :, :]
     ).abs().mean()
 
-    loss_b = (
-        luts[:, :, :, 1:, :] - luts[:, :, :, :-1, :]
+    curvature_b = (
+        luts[:, :, :, 2:, :]
+        - 2.0 * luts[:, :, :, 1:-1, :]
+        + luts[:, :, :, :-2, :]
     ).abs().mean()
 
-    return (loss_r + loss_g + loss_b) / 3.0
+    return (curvature_r + curvature_g + curvature_b) / 3.0
 
 
 def spatial_smoothness(weights):
-    """Encourage neighboring pixels to use similar LUT mixtures."""
+    """Discourage noisy, abrupt spatial changes in LUT weights."""
     horizontal = (
         weights[:, :, :, 1:] - weights[:, :, :, :-1]
     ).abs().mean()
@@ -111,6 +119,26 @@ def spatial_smoothness(weights):
     return (horizontal + vertical) / 2.0
 
 
+def lut_usage_loss(weights):
+    """
+    Encourage the batch-level average usage to avoid collapsing
+    completely onto a single LUT.
+
+    Does NOT force equal weights at each individual pixel.
+    """
+    # weights: (B, K, H, W)
+    mean_usage = weights.mean(dim=(0, 2, 3))
+    mean_usage = mean_usage.clamp_min(1e-8)
+
+    num_luts = mean_usage.numel()
+    uniform = 1.0 / num_luts
+
+    # KL(mean_usage || uniform); zero for uniform average usage.
+    return (
+        mean_usage * torch.log(mean_usage / uniform)
+    ).sum()
+
+
 def grading_loss(
     prediction,
     target,
@@ -118,21 +146,25 @@ def grading_loss(
     weights,
     lut_smooth_weight=0.01,
     map_smooth_weight=0.01,
+    usage_weight=0.0005,
 ):
     reconstruction = F.l1_loss(prediction, target)
     lut_reg = lut_smoothness(luts)
     map_reg = spatial_smoothness(weights)
+    usage_reg = lut_usage_loss(weights)
 
     total = (
         reconstruction
         + lut_smooth_weight * lut_reg
         + map_smooth_weight * map_reg
+        + usage_weight * usage_reg
     )
 
     metrics = {
         "l1": reconstruction.detach().item(),
-        "lut_smoothness": lut_reg.detach().item(),
+        "lut_curvature": lut_reg.detach().item(),
         "map_smoothness": map_reg.detach().item(),
+        "lut_usage": usage_reg.detach().item(),
     }
 
     return total, metrics
