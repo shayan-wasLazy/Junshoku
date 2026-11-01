@@ -147,6 +147,9 @@ def main():
                     row[f"{node_name}_param_{j+1}"] = value
             for j, context in enumerate(result["maps"]):
                 row[f"node{j+1}_map_mean"] = float(context.mean().item())
+                row[f"node{j+1}_map_std"] = float(context.std(unbiased=False).item())
+                row[f"node{j+1}_map_min"] = float(context.min().item())
+                row[f"node{j+1}_map_max"] = float(context.max().item())
             rows.append(row)
 
             print(
