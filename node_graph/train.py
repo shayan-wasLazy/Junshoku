@@ -55,7 +55,8 @@ def main():
             scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(params,float(cfg["training"]["grad_clip_norm"]))
             scaler.step(opt); scaler.update()
-            tr+=loss.item()\n            for key,value in parts.items(): tr_parts[key]+=float(value.item())
+            tr+=loss.item()
+            for key,value in parts.items(): tr_parts[key]+=float(value.item())
         model.eval(); va=0.
         with torch.no_grad():
             for batch in val_dl:
