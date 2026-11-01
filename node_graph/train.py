@@ -42,7 +42,7 @@ def main():
     out=Path(cfg["training"]["checkpoint_dir"]); out.mkdir(parents=True,exist_ok=True)
     best=float("inf")
     for epoch in range(1,int(cfg["training"]["epochs"])+1):
-        model.train(); tr=0.
+        model.train(); tr=0.; tr_parts={"reconstruction":0.,"map_smoothness":0.,"map_variance":0.}
         for batch in tqdm(train_dl,desc=f"Train {epoch}"):
             s=batch["source"].to(device,non_blocking=True)
             r=batch["reference"].to(device,non_blocking=True)
@@ -50,12 +50,12 @@ def main():
             opt.zero_grad(set_to_none=True)
             with torch.autocast(device_type=device.type,dtype=torch.float16,enabled=amp):
                 result=model(s,r); pred=apply_graph(s,result,cfg)
-                loss,_=total_loss(pred,t,result["maps"],cfg)
+                loss,parts=total_loss(pred,t,result["maps"],cfg)
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(params,float(cfg["training"]["grad_clip_norm"]))
             scaler.step(opt); scaler.update()
-            tr+=loss.item()
+            tr+=loss.item()\n            for key,value in parts.items(): tr_parts[key]+=float(value.item())
         model.eval(); va=0.
         with torch.no_grad():
             for batch in val_dl:
@@ -63,7 +63,7 @@ def main():
                 result=model(s,r); pred=apply_graph(s,result,cfg)
                 loss,_=total_loss(pred,t,result["maps"],cfg); va+=loss.item()
         tr/=max(1,len(train_dl)); va/=max(1,len(val_dl))
-        print(f"Epoch {epoch}: train={tr:.5f} val={va:.5f}")
+        print(f"Epoch {epoch}: train={tr:.5f} val={va:.5f} | " + " ".join(f"{k}={v/max(1,len(train_dl)):.5f}" for k,v in tr_parts.items()))
         state={"epoch":epoch,"model":model.state_dict(),"optimizer":opt.state_dict(),"config":cfg}
         torch.save(state,out/"latest.pt")
         if va<best:
