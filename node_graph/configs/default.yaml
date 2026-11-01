@@ -1,13 +1,11 @@
 seed: 42
-
 data:
   root: "F:/Junshoku/TST2K"
   manifest: "F:/Junshoku/TST2K/split_manifest.csv"
   image_size: 256
-  batch_size: 2
+  batch_size: 1
   num_workers: 0
-  augment: true
-
+  augment: false
 model:
   pretrained: true
   freeze_encoder: true
@@ -22,23 +20,27 @@ model:
   contrast_limit: 0.5
   saturation_limit: 0.5
   hue_limit: 0.15
-
+synthetic:
+  samples: 4000
+  epochs: 5
+  map_weight: 2.0
+  param_weight: 1.0
+  reconstruction_weight: 1.0
 training:
-  epochs: 30
+  epochs: 20
   learning_rate: 0.0001
   weight_decay: 0.0001
   grad_clip_norm: 1.0
   amp: true
-  checkpoint_dir: "checkpoints/node_graph_fixed"
-
+  synthetic_checkpoint_dir: "checkpoints/node_graph_synthetic"
+  checkpoint_dir: "checkpoints/node_graph_finetuned"
 loss:
   reconstruction: 1.0
-  map_smoothness: 0.005
-  map_variance: 0.01
-  map_min_std: 0.03
-
+  map_smoothness: 0.002
+  map_variance: 0.0
+  map_min_std: 0.0
 inference:
-  checkpoint: "checkpoints/node_graph_fixed/best.pt"
+  checkpoint: "checkpoints/node_graph_finetuned/best.pt"
   input: "data/example/source.png"
   reference: "data/example/reference.png"
   output: "outputs/graded.png"
