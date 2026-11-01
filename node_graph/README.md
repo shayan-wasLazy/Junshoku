@@ -112,3 +112,42 @@ For an 8 GB GPU, start with 256px, batch size 1–2, frozen VGG, and AMP. If you
 - The masks are learned through reconstruction plus spatial smoothness. They do not have ground-truth semantic labels.
 - The initial tiny TST2K split is for a smoke test only. Use a larger, properly split dataset for conclusions.
 - Pretrained VGG16 weights are downloaded by torchvision on first use when `pretrained: true`.
+
+
+## 6. Full TST2K evaluation report
+
+The evaluation script follows the same reporting workflow as the earlier LUT experiments, adapted for the serial node-graph model. It evaluates the held-out `test` split and compares the model against an identity baseline (the unchanged source image).
+
+Install the additional packages from the requirements file:
+
+```powershell
+pip install -r node_graph/requirements.txt
+```
+
+Evaluate the complete test split:
+
+```powershell
+python -m node_graph.evaluate --config node_graph/configs/default.yaml
+```
+
+Evaluate one sample only (only if its ID belongs to the test split):
+
+```powershell
+python -m node_graph.evaluate --config node_graph/configs/default.yaml --sample-id 0429
+```
+
+Evaluate the first 10 test samples:
+
+```powershell
+python -m node_graph.evaluate --config node_graph/configs/default.yaml --max-samples 10
+```
+
+Outputs are written to `Outputs/node_graph_evaluation/`:
+
+- `metrics_per_image.csv`: per-sample model and identity L1, MSE, PSNR, SSIM, node parameters, and context-map means.
+- `comparisons/`: four-panel source/reference/ground-truth/prediction images.
+- `context_maps/`: visualizations and NumPy arrays for each of the three learned node masks.
+
+The evaluation script also reports mean and standard deviation for each metric and counts how often the model beats the unchanged-source baseline on L1.
+
+Note: the script requires the sample ID to be present in the existing held-out test manifest. It deliberately does not move samples between splits. If 0429 is not in the test split, use a test ID printed from the manifest instead.
