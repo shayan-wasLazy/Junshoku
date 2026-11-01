@@ -26,8 +26,9 @@ def main():
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:",device)
     if device.type=="cuda": print(torch.cuda.get_device_name(0))
-    train_ds=PST50Pairs(cfg["data"]["root"],cfg["data"]["train_indices"],cfg["data"]["image_size"])
-    val_ds=PST50Pairs(cfg["data"]["root"],cfg["data"]["val_indices"],cfg["data"]["image_size"])
+    train_ds=TST2KDataset(cfg["data"]["root"],"train",cfg["data"]["image_size"],cfg["data"]["augment"],cfg["data"]["manifest"],cfg["seed"])
+    val_ds=TST2KDataset(cfg["data"]["root"],"val",cfg["data"]["image_size"],False,cfg["data"]["manifest"],cfg["seed"])
+    print(f"TST2K samples: train={len(train_ds)}, validation={len(val_ds)}")
     train_dl=DataLoader(train_ds,batch_size=cfg["data"]["batch_size"],shuffle=True,
                         num_workers=cfg["data"]["num_workers"],pin_memory=device.type=="cuda")
     val_dl=DataLoader(val_ds,batch_size=cfg["data"]["batch_size"],shuffle=False,
