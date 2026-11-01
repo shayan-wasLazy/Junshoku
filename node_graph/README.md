@@ -53,18 +53,18 @@ If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process -Execut
 
 ## 2. Dataset layout
 
-The loader follows the existing repository's PST50 naming convention:
+The loader follows the existing repository's TST2K triplet convention:
 
 ```text
-data/PST50/
+data/TST2K/
 ├── content_709/in1.png ...
 ├── paired_style/tar1.png ...
 └── paired_gt/gt1.png ...
 ```
 
-The YAML config defaults to indices 1–40 for training and 41–50 for validation. This is only a small initial split for testing the pipeline; for research, make a video/source-disjoint split and avoid adjacent frames leaking across train and validation.
+The loader creates a reproducible 90% train / 5% validation / 5% test split in split_manifest.csv on first run. It expects numeric sample folders containing exactly one image each named content, reference, and gt (extension may vary). Inspect the generated manifest before training. If samples are extracted from the same video, split by source video rather than randomly by frame to prevent leakage.
 
-Update `data.root` in `node_graph/configs/default.yaml` to your actual PST50 path. For example, `F:/Junshoku/PST50`.
+Update `data.root` in `node_graph/configs/default.yaml` to your actual TST2K path. For example, `F:/Junshoku/TST2K`.
 
 ## 3. Train
 
@@ -110,5 +110,5 @@ For an 8 GB GPU, start with 256px, batch size 1–2, frozen VGG, and AMP. If you
 - Current node transforms are differentiable, simplified approximations of grading controls, not a full DaVinci Resolve color-science implementation.
 - Current video inference/temporal stabilization is not implemented in this branch. Frame-wise processing can flicker; add temporal regularization or motion-compensated consistency before calling it video-ready.
 - The masks are learned through reconstruction plus spatial smoothness. They do not have ground-truth semantic labels.
-- The initial tiny PST50 split is for a smoke test only. Use a larger, properly split dataset for conclusions.
+- The initial tiny TST2K split is for a smoke test only. Use a larger, properly split dataset for conclusions.
 - Pretrained VGG16 weights are downloaded by torchvision on first use when `pretrained: true`.
