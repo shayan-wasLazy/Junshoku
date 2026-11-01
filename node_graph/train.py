@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from .utils import load_config
-from .data import PST50Pairs
+from .data import TST2KDataset
 from .model import NodeGraph
 from .graph import apply_graph
 from .losses import total_loss
