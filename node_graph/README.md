@@ -151,3 +151,26 @@ Outputs are written to `Outputs/node_graph_evaluation/`:
 The evaluation script also reports mean and standard deviation for each metric and counts how often the model beats the unchanged-source baseline on L1.
 
 Note: the script requires the sample ID to be present in the existing held-out test manifest. It deliberately does not move samples between splits. If 0429 is not in the test split, use a test ID printed from the manifest instead.
+
+
+## Context-map collapse fix (new training run required)
+
+The fixed configuration bounds context gates to `[0.05, 0.95]`, initializes their logits at the neutral midpoint, reduces total-variation pressure, and adds a small spatial-variance floor. Training logs now report reconstruction, map smoothness, and map-variance terms separately. Evaluation CSVs include each map's mean, standard deviation, minimum, and maximum.
+
+**Important:** this is a stabilization measure, not ground-truth supervision of where a grading operation belongs. Spatial variation alone does not prove semantic correctness; inspect the maps and image comparisons. A uniform map can be valid for a genuinely global adjustment.
+
+The fixed config writes checkpoints to `checkpoints/node_graph_fixed/`. Train from scratch because the old checkpoint was trained with the previous map-head behavior:
+
+```powershell
+git pull origin cog-node-architecture
+pip install -r node_graph/requirements.txt
+python -m node_graph.train --config node_graph/configs/default.yaml --epochs 1 --batch-size 1
+```
+
+Evaluate the newly trained checkpoint:
+
+```powershell
+python -m node_graph.evaluate --config node_graph/configs/default.yaml --max-samples 10
+```
+
+Do not compare the new run with the old run unless you keep the same test samples, image resolution, and evaluation settings. The fixed run uses a separate checkpoint directory so the previous `checkpoints/node_graph/best.pt` is not overwritten.
