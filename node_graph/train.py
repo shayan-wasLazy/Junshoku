@@ -34,6 +34,12 @@ def main():
     val_dl=DataLoader(val_ds,batch_size=cfg["data"]["batch_size"],shuffle=False,
                       num_workers=cfg["data"]["num_workers"],pin_memory=device.type=="cuda")
     model=NodeGraph(cfg).to(device)
+    if args.init_checkpoint and Path(args.init_checkpoint).is_file():
+        warm=torch.load(args.init_checkpoint,map_location=device,weights_only=False)
+        model.load_state_dict(warm.get("model",warm),strict=True)
+        print("Initialized from synthetic checkpoint:",args.init_checkpoint)
+    else:
+        raise FileNotFoundError(f"Synthetic pretraining checkpoint not found: {args.init_checkpoint}. Run node_graph.train_synthetic first.")
     params=[p for p in model.parameters() if p.requires_grad]
     opt=torch.optim.AdamW(params,lr=cfg["training"]["learning_rate"],
                           weight_decay=cfg["training"]["weight_decay"])
