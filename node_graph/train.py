@@ -15,7 +15,7 @@ def main():
     ap.add_argument("--data-root",default=None)
     ap.add_argument("--epochs",type=int,default=None)
     ap.add_argument("--batch-size",type=int,default=None)
-    ap.add_argument("--lr",type=float,default=None)
+    ap.add_argument("--lr",type=float,default=None)\n    ap.add_argument("--init-checkpoint",default="checkpoints/node_graph_synthetic/latest.pt")
     args=ap.parse_args()
     cfg=load_config(args.config)
     if args.data_root: cfg["data"]["root"]=args.data_root
