@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +31,8 @@ CONFIG_PATH = Path(os.getenv("JUNSHOKU_CONFIG", ROOT / "node_graph/configs/defau
 CHECKPOINT = Path(os.getenv("JUNSHOKU_CHECKPOINT", ROOT / "checkpoints/node_graph_finetuned/best.pt"))
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 app = FastAPI(title="Junshoku Studio API", version="1.0.0")
+cors_origins = [origin.strip() for origin in os.getenv("JUNSHOKU_CORS_ORIGINS", "*").split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=cors_origins, allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 _model = None
 _cfg = None
