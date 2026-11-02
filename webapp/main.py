@@ -43,7 +43,11 @@ def model_and_config():
         if not CHECKPOINT.is_file():
             raise HTTPException(503, "Model checkpoint is not installed on this server yet.")
         try:
-            _model = NodeGraph(_cfg).to(DEVICE)
+            model_cfg = dict(_cfg)
+            model_cfg["model"] = dict(_cfg["model"])
+            # The complete encoder weights are in the checkpoint; avoid a runtime VGG download.
+            model_cfg["model"]["pretrained"] = False
+            _model = NodeGraph(model_cfg).to(DEVICE)
             state = torch.load(CHECKPOINT, map_location=DEVICE, weights_only=False)
             _model.load_state_dict(state["model"])
             _model.eval()
