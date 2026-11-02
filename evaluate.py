@@ -25,7 +25,7 @@ ROOT = Path(r"F:\Junshoku")
 DATASET_ROOT = ROOT / "TST2K"
 
 CHECKPOINT_PATH = (
-    ROOT / "checkpoints_tst2k" / "best.pt"
+    ROOT / "checkpoints" / "node_graph" / "best.pt"
 )
 
 OUTPUT_DIR = ROOT / "Outputs" / "evaluation_tst2k"
