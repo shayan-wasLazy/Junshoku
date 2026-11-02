@@ -1,0 +1,8 @@
+# Install the matching PyTorch + torchvision build first:
+# https://pytorch.org/get-started/locally/
+PyYAML>=6.0
+Pillow>=10.0
+numpy>=1.26
+tqdm>=4.66
+scikit-image>=0.22
+matplotlib>=3.8
