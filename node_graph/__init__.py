@@ -1,1 +1,1 @@
-"""Junshoku differentiable serial grading-node prototype."""}
+"""Junshoku differentiable serial grading-node prototype."""

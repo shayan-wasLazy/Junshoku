@@ -6,3 +6,6 @@ __pycache__/
 /TST2K
 /reference.jpg
 /input_video.mp4
+# Model checkpoints - keep locally, don't push to GitHub
+Checkpoints/
+checkpoints/
