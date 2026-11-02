@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#11110f">
+  <title>Junshoku Studio — Colour, with intention.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#"><span class="brand-mark">J</span><span>junshoku<span class="brand-dot">.</span></span></a>
+      <div class="project-name"><span class="live-dot"></span> UNTITLED PROJECT <span class="muted">/</span> 01</div>
+      <div class="top-actions"><span id="api-status" class="api-status"><i></i> CONNECTING</span><button class="quiet-btn" id="reset-btn">Reset project</button><button class="export-top" id="export-video-top">Export video <span>↗</span></button></div>
+    </header>
+
+    <main class="workspace">
+      <aside class="left-rail">
+        <div class="rail-heading">PROJECT</div>
+        <button class="rail-item active"><span>▧</span> Edit</button>
+        <button class="rail-item" id="show-lut"><span>◈</span> Export LUT</button>
+        <div class="rail-spacer"></div>
+        <div class="rail-note"><span class="tiny-orb"></span><div><b>Junshoku Engine</b><small>Spatial colour intelligence</small></div></div>
+      </aside>
+
+      <section class="editor">
+        <div class="section-head"><div><div class="eyebrow">POST-PRODUCTION WORKSPACE</div><h1>Make the image <em>feel.</em></h1><p>Bring a reference. Find the feeling. Shape every frame.</p></div><div class="session-tag">SESSION <b>LOCAL 01</b></div></div>
+
+        <div class="media-grid">
+          <section class="viewer panel">
+            <div class="panel-head"><div class="panel-title"><span class="panel-icon">▣</span> VIEWER <span class="muted">/ SOURCE</span></div><div class="viewer-tools"><span id="video-meta">NO CLIP LOADED</span><button id="fit-btn" title="Fit preview">⌗</button></div></div>
+            <div class="preview-stage" id="preview-stage">
+              <div class="empty-state" id="empty-video"><div class="upload-symbol">↥</div><b>Drop your footage here</b><span>MP4, MOV, WebM · up to server upload limit</span><label class="upload-cta" for="video-file">Choose video</label></div>
+              <video id="video" controls playsinline></video>
+              <div class="frame-label">SOURCE <span>REC 709</span></div>
+            </div>
+            <div class="viewer-footer"><span id="timecode">00:00:00:00</span><div class="transport"><button id="jump-start">|◀</button><button id="step-back">−1f</button><button id="play-btn" class="play-btn">▶</button><button id="step-forward">+1f</button><button id="jump-end">▶|</button></div><span id="duration-label">00:00</span></div>
+          </section>
+
+          <aside class="side-stack">
+            <section class="panel reference-panel">
+              <div class="panel-head"><div class="panel-title"><span class="panel-icon">◉</span> REFERENCE LOOK</div><span class="mini-count">01</span></div>
+              <div class="reference-drop" id="reference-drop">
+                <img id="reference-preview" alt="Reference image preview">
+                <div class="reference-empty" id="reference-empty"><span>＋</span><b>Bring a reference</b><small>Drop a still or browse files</small></div>
+                <label for="reference-file" class="reference-change">Change ↗</label>
+              </div>
+              <div class="reference-meta"><div><b id="reference-name">No reference selected</b><small>Style guidance for your grade</small></div><button id="remove-reference" title="Remove reference">×</button></div>
+            </section>
+            <section class="panel grade-panel">
+              <div class="panel-head"><div class="panel-title"><span class="panel-icon">✳</span> GRADE ENGINE</div><span class="engine-pill">NODE GRAPH</span></div>
+              <div class="node-row"><span class="node-index">01</span><div><b>Exposure & white balance</b><small>Light · temperature · tint</small></div><span class="node-state">ACTIVE</span></div>
+              <div class="node-row"><span class="node-index">02</span><div><b>Tonal contrast</b><small>Black · white · pivot</small></div><span class="node-state">ACTIVE</span></div>
+              <div class="node-row"><span class="node-index">03</span><div><b>Creative colour</b><small>Hue · saturation · split tone</small></div><span class="node-state">ACTIVE</span></div>
+              <div class="grade-foot"><span>3 OPERATORS</span><span>3 SPATIAL MAPS</span></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="panel timeline-panel">
+          <div class="panel-head"><div class="panel-title"><span class="panel-icon">⌁</span> TIMELINE & CUTS</div><div class="timeline-actions"><button id="mark-in">Set in point</button><button id="mark-out">Set out point</button><button id="add-cut" class="cut-btn">＋ Cut selection</button></div></div>
+          <div class="timeline-track-wrap"><div class="track-ruler"><span>00:00</span><span>PLAYHEAD</span><span id="ruler-end">END</span></div><div class="track" id="track"><div class="track-fill"></div><div class="trim-window" id="trim-window"><div class="trim-handle left"></div><div class="trim-handle right"></div></div><div class="playhead" id="playhead"></div></div></div>
+          <div class="trim-fields"><label>IN <input id="trim-in" type="number" min="0" step=".1" value="0"> <span>sec</span></label><label>OUT <input id="trim-out" type="number" min="0" step=".1" value="0"> <span>sec</span></label><div class="cut-list" id="cut-list">No cuts added</div></div>
+        </section>
+
+        <div class="bottom-grid">
+          <section class="panel workflow-panel"><div class="panel-head"><div class="panel-title"><span class="panel-icon">◌</span> WORKFLOW</div><span class="workflow-step">01 — 03</span></div><div class="workflow-line"><div class="workflow-node current">1</div><div class="workflow-connector"></div><div class="workflow-node">2</div><div class="workflow-connector"></div><div class="workflow-node">3</div></div><div class="workflow-labels"><span><b>Import</b><small>Footage & reference</small></span><span><b>Grade</b><small>Neural colour transfer</small></span><span><b>Export</b><small>Video & .cube LUT</small></span></div></section>
+          <section class="panel export-panel"><div class="panel-head"><div class="panel-title"><span class="panel-icon">⇧</span> DELIVERABLES</div><span class="quality-tag">HIGH QUALITY</span></div><div class="deliverable"><div class="file-icon">▶</div><div><b>Graded video</b><small>MP4 · H.264 · original audio</small></div><button id="export-video">Export ↗</button></div><div class="deliverable"><div class="file-icon cube">◇</div><div><b>3D colour LUT</b><small>.CUBE · 33 × 33 × 33</small></div><button id="export-lut">Download ↧</button></div></section>
+        </div>
+        <div class="footer-note"><span>JUNSHOKU STUDIO <b>0.1.0</b></span><span>BUILT FOR THE ART OF COLOUR <i>✳</i></span></div>
+      </section>
+    </main>
+    <input type="file" id="video-file" accept="video/*" hidden><input type="file" id="reference-file" accept="image/*" hidden>
+    <div class="toast" id="toast"></div>
+    <div class="busy-overlay" id="busy"><div class="busy-card"><div class="spinner"></div><b id="busy-title">Processing your grade</b><p id="busy-copy">This can take a while on CPU inference.</p></div></div>
+    <dialog id="lut-dialog"><div class="dialog-head"><div><span class="eyebrow">LOOK TRANSFER</span><h2>Export your <em>look.</em></h2></div><button id="close-lut">×</button></div><p>A .cube LUT is a portable, global approximation of the current grade. Spatially varying masks are averaged because standard 3D LUTs cannot encode per-pixel spatial maps.</p><div class="lut-size"><span>Cube resolution</span><select id="lut-size"><option value="33" selected>33-point · recommended</option><option value="17">17-point · lightweight</option></select></div><button class="export-wide" id="confirm-lut">Generate & download .cube ↧</button></dialog>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
