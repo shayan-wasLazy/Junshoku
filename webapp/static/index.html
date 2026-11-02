@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <div class="app-shell">
@@ -78,6 +78,7 @@
     <div class="busy-overlay" id="busy"><div class="busy-card"><div class="spinner"></div><b id="busy-title">Processing your grade</b><p id="busy-copy">This can take a while on CPU inference.</p></div></div>
     <dialog id="lut-dialog"><div class="dialog-head"><div><span class="eyebrow">LOOK TRANSFER</span><h2>Export your <em>look.</em></h2></div><button id="close-lut">×</button></div><p>A .cube LUT is a portable, global approximation of the current grade. Spatially varying masks are averaged because standard 3D LUTs cannot encode per-pixel spatial maps.</p><div class="lut-size"><span>Cube resolution</span><select id="lut-size"><option value="33" selected>33-point · recommended</option><option value="17">17-point · lightweight</option></select></div><button class="export-wide" id="confirm-lut">Generate & download .cube ↧</button></dialog>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
