@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,8 @@ import cv2
 import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -59,6 +61,20 @@ def read_rgb(path: Path, max_side: int = 512):
             im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.Resampling.LANCZOS)
         arr = np.asarray(im, dtype=np.float32) / 255.0
     return torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(DEVICE)
+
+
+def read_video_frame(path: Path, max_side: int = 512):
+    cap = cv2.VideoCapture(str(path))
+    ok, frame = cap.read()
+    cap.release()
+    if not ok:
+        raise HTTPException(400, "Could not read a frame from the uploaded video.")
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    h, w = rgb.shape[:2]
+    scale = min(1.0, max_side / max(h, w))
+    if scale < 1:
+        rgb = cv2.resize(rgb, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA)
+    return torch.from_numpy(rgb.astype(np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0).to(DEVICE)
 
 
 def infer_tensor(model, cfg, source, reference):
@@ -200,7 +216,10 @@ async def grade_video(
             # Silent videos are valid; mux the graded video without an audio stream.
             run_ffmpeg(["-y", "-i", str(writer_path), "-c:v", "libx264", "-preset", "veryfast",
                         "-crf", "20", "-movflags", "+faststart", str(final_path)])
-        return FileResponse(final_path, media_type="video/mp4", filename="junshoku_graded.mp4", background=None)
+        delivery_path = Path(tempfile.gettempdir()) / f"junshoku_{uuid.uuid4().hex}.mp4"
+        shutil.copy2(final_path, delivery_path)
+        return FileResponse(delivery_path, media_type="video/mp4", filename="junshoku_graded.mp4",
+                            background=BackgroundTask(delivery_path.unlink, missing_ok=True))
 
 
 @app.post("/api/lut")
@@ -209,14 +228,14 @@ async def export_lut(
     reference: UploadFile = File(...),
     size: int = Form(33),
 ):
-    if size not in (17, 33,  generate_placeholder):
-        pass
+    if size not in (17, 33):
+        raise HTTPException(400, "LUT size must be 17 or 33.")
     model, cfg = model_and_config()
     with tempfile.TemporaryDirectory(prefix="junshoku_lut_") as tmp:
         work = Path(tmp)
         src_path = await save_upload(source, work / "source_image")
         ref_path = await save_upload(reference, work / "reference_image")
-        src = read_rgb(src_path, max_side=512)
+        src = read_video_frame(src_path, max_side=512)
         ref = read_rgb(ref_path, max_side=512)
         _, prediction = infer_tensor(model, cfg, src, ref)
         params = [p.detach() for p in prediction["params"]]
@@ -241,4 +260,7 @@ async def export_lut(
             f.write(f"LUT_3D_SIZE {size}\nDOMAIN_MIN 0.0 0.0 0.0\nDOMAIN_MAX 1.0 1.0 1.0\n")
             for rgb in values:
                 f.write(f"{rgb[0]:.7f} {rgb[1]:.7f} {rgb[2]:.7f}\n")
-        return FileResponse(lut_path, media_type="application/octet-stream", filename="junshoku_grade.cube")
+        delivery_path = Path(tempfile.gettempdir()) / f"junshoku_{uuid.uuid4().hex}.cube"
+        shutil.copy2(lut_path, delivery_path)
+        return FileResponse(delivery_path, media_type="application/octet-stream", filename="junshoku_grade.cube",
+                            background=BackgroundTask(delivery_path.unlink, missing_ok=True))
